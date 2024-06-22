@@ -92,14 +92,14 @@ if __name__ == "__main__":
     if command == "get-effects":
         effects = get_effects(ip_address)
         if effects:
-            print("Effects:", effects)
+            print(';'.join(effects))
         else:
             print("Failed to get effects or no effects available.")
 
     elif command == "get-palettes":
         palettes = get_palettes(ip_address)
         if palettes:
-            print("Palettes:", palettes)
+            print(';'.join(palettes))
         else:
             print("Failed to get palettes or no palettes available.")
 
