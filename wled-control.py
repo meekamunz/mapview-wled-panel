@@ -1,5 +1,6 @@
 import requests
 import sys
+import re
 
 def get_effects(ip_address):
     url = f"http://{ip_address}/json"
@@ -7,7 +8,14 @@ def get_effects(ip_address):
     if response.status_code == 200:
         data = response.json()
         if 'effects' in data:
+            original_effects = data['effects']
             effects = data['effects']
+            # Remove emoji characters and only get the first item before a comma
+            effects = [re.sub(r'[^\w\s,]', '', effect).split(',')[0] for effect in effects]
+            # Remove any item that has "2D" or "reserved" in the name
+            effects = [effect for effect in effects if "2D" not in effect and "reserved" not in effect.lower()]
+            # Remove leading whitespace
+            effects = [effect.strip() for effect in effects]
             return effects
         else:
             return None
@@ -73,6 +81,19 @@ def set_palette(ip_address, palette_id):
         return response.status_code == 200
     else:
         return False
+    
+def get_sync_state(ip_address):
+    url = f"http://{ip_address}/json"
+    response = requests.get(url)
+    if response.status_code == 200:
+        data = response.json()
+        sync_state = data.get('state', {}).get('udpn', {}).get('send', None)
+        if sync_state is not None:
+            return "true" if sync_state else "false"
+        else:
+            return "Failed to get sync state or sync state not available."
+    else:
+        return "Failed to connect to the device."
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:
@@ -84,6 +105,7 @@ if __name__ == "__main__":
         print("  <ip_address> sync-on")
         print("  <ip_address> colour <r> <g> <b>")
         print("  <ip_address> set-palette <palette_id>")
+        print("  <ip_address> get-sync")
         sys.exit(1)
 
     command = sys.argv[2]
@@ -148,12 +170,17 @@ if __name__ == "__main__":
         else:
             print(f"Failed to set palette '{palette_id}'.")
 
+    elif command == "get-sync":
+        sync_state = get_sync_state(ip_address)
+        print(sync_state)
+
     else:
         print("Unknown command.")
         print("Usage:")
         print("  <ip_address> get-effects")
         print("  <ip_address> get-palettes")
         print("  <ip_address> preset <preset_id>")
+        print("  <ip_address> get-sync")
         print("  <ip_address> sync-off")
         print("  <ip_address> sync-on")
         print("  <ip_address> colour <r> <g> <b>")
