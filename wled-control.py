@@ -1,18 +1,36 @@
 import requests
 import sys
 import re
+import json
+
+def clean_json_response(text):
+    # Remove invalid control characters
+    cleaned_text = re.sub(r'[\x00-\x1f\x7f]', '', text)
+    return cleaned_text
 
 def get_effects(ip_address):
     url = f"http://{ip_address}/json"
     response = requests.get(url)
     if response.status_code == 200:
-        data = response.json()
-        if 'effects' in data:
-            effects = data['effects']
-            # Extract only the effect names by splitting at "@" and taking the first part
-            effect_names = [effect.split('@')[0] for effect in effects]
-            return effect_names
-        else:
+        try:
+            # Clean the response text
+            cleaned_response_text = clean_json_response(response.text)
+            data = json.loads(cleaned_response_text)
+            if 'effects' in data:
+                effects = data['effects']
+                # Extract only the effect names by splitting at "@" and taking the first part
+                effect_names = [effect.split('@')[0] for effect in effects]
+                # Replace "♪" with "Aud:" and remove other special characters
+                cleaned_effects = []
+                for effect in effect_names:
+                    effect = effect.replace("♪", "Aud:")  # Replace "♪" with "Aud:"
+                    effect = re.sub(r'[^a-zA-Z0-9 Aud:]', '', effect).strip()  # Remove other special characters
+                    cleaned_effects.append(effect)
+                return cleaned_effects
+            else:
+                return None
+        except json.JSONDecodeError as e:
+            print(f"JSON decode error: {e}")
             return None
     else:
         return None
@@ -121,13 +139,39 @@ def get_colour(ip_address):
                 return colour[0]  # Returns the first color in the list
     return None
 
+def closest_match(input_name, available_names):
+    input_name = input_name.lower()
+    closest = None
+    min_distance = float('inf')
+    for name in available_names:
+        distance = levenshtein_distance(input_name, name.lower())
+        if distance < min_distance:
+            min_distance = distance
+            closest = name
+    return closest
+
+def levenshtein_distance(s1, s2):
+    if len(s1) < len(s2):
+        return levenshtein_distance(s2, s1)
+    if len(s2) == 0:
+        return len(s1)
+    previous_row = range(len(s2) + 1)
+    for i, c1 in enumerate(s1):
+        current_row = [i + 1]
+        for j, c2 in enumerate(s2):
+            insertions = previous_row[j + 1] + 1
+            deletions = current_row[j] + 1
+            substitutions = previous_row[j] + (c1 != c2)
+            current_row.append(min(insertions, deletions, substitutions))
+        previous_row = current_row
+    return previous_row[-1]
+
 def set_effect(ip_address, effect_name):
     effects = get_effects(ip_address)
     if not effects:
         return False
-    if effect_name not in effects:
-        return False
-    effect_id = effects.index(effect_name)
+    closest_effect = closest_match(effect_name, effects)
+    effect_id = effects.index(closest_effect)
     url = f"http://{ip_address}/json/state"
     payload = {"seg": [{"fx": effect_id}]}
     response = requests.post(url, json=payload)
@@ -154,7 +198,7 @@ if __name__ == "__main__":
         print("  <ip_address> preset <preset_id>")
         print("  <ip_address> sync-off")
         print("  <ip_address> sync-on")
-        print("  <ip_address> colour <r> <g> <b>")
+        print("  <ip_address> set-colour <r> <g> <b>")
         print("  <ip_address> set-palette <palette_name>")
         print("  <ip_address> get-sync")
         print("  <ip_address> get-presets")
@@ -202,7 +246,7 @@ if __name__ == "__main__":
         else:
             print("Failed to turn on sync.")
 
-    elif command == "colour":
+    elif command == "set-colour":
         if len(sys.argv) < 6:
             print("Usage: <ip_address> colour <r> <g> <b>")
             sys.exit(1)
